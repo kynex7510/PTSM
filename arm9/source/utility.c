@@ -1,5 +1,7 @@
 #include "utility.h"
 
+#include <stdio.h>
+
 #define GAME_CODE_EMPTY "\x00\x00\x00\x00"
 
 #define GAME_CODE_JPN "UZPJ"
@@ -24,7 +26,38 @@
 
 static u8 g_CardHeader[512];
 
+// Helpers
+
+static void printColor(char const *s, bool const fail) {
+  if (fail)
+    iprintf("\x1b[31;1m");
+  else
+    iprintf("\x1b[32;1m");
+
+  iprintf("%s\x1b[39m\n", s);
+}
+
+// Adapted from nds-examples/tree/master/card/eeprom
+static bool readHeader(void) {
+  u8 headerCopy[512];
+
+  // Request card access.
+  enableSlot1();
+  sysSetBusOwners(BUS_OWNER_ARM9, BUS_OWNER_ARM9);
+
+  // Read header.
+  cardReadHeader(g_CardHeader);
+  cardReadHeader(headerCopy);
+
+  // Check that the header is valid.
+  return !memcmp(g_CardHeader, headerCopy, 512) &&
+         memcmp(g_CardHeader + 0x0C, GAME_CODE_EMPTY, 4);
+}
+
 // Utility
+
+void printSuccess(char const *s) { printColor(s, false); }
+void printError(char const *s) { printColor(s, true); }
 
 uint32 waitForKey(void) {
   uint32 key = 0;
@@ -39,44 +72,25 @@ uint32 waitForKey(void) {
   return key;
 }
 
-void requestCardAccess(void) {
-  enableSlot1();
-  sysSetBusOwners(BUS_OWNER_ARM9, BUS_OWNER_ARM9);
-}
-
-// Adapted from nds-examples/tree/master/card/eeprom
-tNDSHeader *readHeader(void) {
-  u8 headerCopy[512];
-
-  // Read header.
-  cardReadHeader(g_CardHeader);
-  cardReadHeader(headerCopy);
-
-  // Check that the header is valid.
-  if (memcmp(g_CardHeader, headerCopy, 512) ||
-      !memcmp(g_CardHeader + 0x0C, GAME_CODE_EMPTY, 4))
-    return NULL;
-
-  return (tNDSHeader *)g_CardHeader;
-}
-
-TARegion getTARegion(tNDSHeader const *header) {
+TARegion getGameRegion(void) {
 #define REGION_CASE(r)                                                         \
   if (!memcmp(g_CardHeader + 0x0C, GAME_CODE_##r, 4) &&                        \
       !memcmp(g_CardHeader, GAME_TITLE_##r, 7))                                \
   return TARegion_##r
 
-  REGION_CASE(JPN);
-  REGION_CASE(ITA);
-  REGION_CASE(ENG);
-  REGION_CASE(SPA);
-  REGION_CASE(GER);
-  REGION_CASE(FRA);
+  if (readHeader()) {
+    REGION_CASE(JPN);
+    REGION_CASE(ITA);
+    REGION_CASE(ENG);
+    REGION_CASE(SPA);
+    REGION_CASE(GER);
+    REGION_CASE(FRA);
+  }
 
   return TARegion_Unknown;
 }
 
-const char *regionAsString(TARegion const region) {
+char const *regionAsString(TARegion const region) {
   switch (region) {
   case TARegion_JPN:
     return "Japan";

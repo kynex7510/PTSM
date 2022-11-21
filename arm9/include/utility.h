@@ -13,10 +13,10 @@ typedef enum {
   TARegion_FRA,
 } TARegion;
 
+void printSuccess(char const *s);
+void printError(char const *s);
 uint32 waitForKey(void);
-void requestCardAccess(void);
-tNDSHeader *readHeader(void);
-TARegion getTARegion(tNDSHeader const *header);
-const char *regionAsString(TARegion const region);
+TARegion getGameRegion(void);
+char const *regionAsString(TARegion const region);
 
 #endif /* _UTILITY_H */

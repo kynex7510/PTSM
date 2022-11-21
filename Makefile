@@ -8,9 +8,10 @@ endif
 export TARGET := $(shell basename $(CURDIR))
 export TOPDIR := $(CURDIR)
 
-GAME_TITLE     := PTSM
-GAME_SUBTITLE1 := LWP:TA Save Manager
-GAME_SUBTITLE2 := https://github.com/csnikki/PTSM
+GAME_TITLE     := Learn with Pokémon: Typing Adventure
+GAME_SUBTITLE1 := Save Manager
+GAME_SUBTITLE2 := Nikki
+# GAME_ICON      := icon.bmp
 
 include $(DEVKITARM)/ds_rules
 

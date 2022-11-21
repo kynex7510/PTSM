@@ -1,6 +1,5 @@
 #include "utility.h"
 
-#include <stdint.h>
 #include <stdio.h>
 
 typedef struct {
@@ -10,23 +9,37 @@ typedef struct {
   u8 *responseData;
 } BTCMD, *PBTCMD;
 
-static void irqHandler(void) { iprintf("GOT IRQ!\n"); }
+volatile bool g_GotCmd = false;
 
-static void spiWait(void) {
-  while (REG_AUXSPICNT & 0x80)
-    ;
+// IRQ stuff
+
+static void irqCmd(void) { g_GotCmd = true; }
+
+static void waitForIrq(void) {
+  do {
+  } while (!g_GotCmd);
+  g_GotCmd = false;
 }
 
-static void btTransfer(PBTCMD cmdData) {
-  irqEnable(IRQ_CARD_LINE);
-  irqSet(IRQ_CARD_LINE, irqHandler);
+// SPI stuff
+
+static void spiWait(void) {
+  do {
+  } while (REG_AUXSPICNT & 0x80);
+}
+
+static bool btTransfer(PBTCMD cmdData) {
+  REG_ROMCTRL = 0x27416000;
 
   // Initialize connection.
+  g_GotCmd = false;
   REG_AUXSPICNT = 0xA040;
   REG_AUXSPIDATA = 0xFF;
   spiWait();
   REG_AUXSPICNT = 0x43;
   swiDelay(20);
+  waitForIrq();
+  iprintf("Got init irq\n");
 
   // Send request command.
   REG_AUXSPICNT = 0xA040;
@@ -50,108 +63,97 @@ static void btTransfer(PBTCMD cmdData) {
     spiWait();
   }
 
+  waitForIrq();
+  iprintf("Got command irq\n");
+
   // Send response command.
   REG_AUXSPICNT = 0xA040;
   REG_AUXSPIDATA = 0x02;
   spiWait();
-  REG_AUXSPICNT = 0xA000;
   REG_AUXSPIDATA = 0x00;
   spiWait();
+
+  // I'm 99% confident anything above is correct.
+  // Here we probably need to synchronize with the cart
+  // or something, idk but first two bytes (length)
+  // are always 00 00, which is not good.
 
   // Get response size.
-  u16 retSize = 0;
-  REG_AUXSPIDATA = 0x00;
-  spiWait();
-  retSize = REG_AUXSPIDATA;
-  REG_AUXSPIDATA = 0x00;
-  spiWait();
-  retSize |= ((u16)(REG_AUXSPIDATA) << 8);
-
-  iprintf("RET SIZE: 0x%04X\n", retSize);
-
-  cmdData->responseSize =
-      (retSize < cmdData->responseSize ? retSize : cmdData->responseSize);
-
-  // Get response data.
-  for (u16 i = 0; i < cmdData->responseSize; i++) {
-    if (i == (cmdData->responseSize - 1))
-      REG_AUXSPICNT = 0xA000;
-
+  for (int i = 0u; i < 5; i++) {
+    swiDelay(4190000 * 5);
     REG_AUXSPIDATA = 0x00;
     spiWait();
-    cmdData->responseData[i] = REG_AUXSPIDATA;
+    iprintf("BYTE 1: 0x%02X\n", REG_AUXSPIDATA);
+    if (i == 4) {
+      REG_AUXSPICNT = 0x00;
+      REG_AUXSPIDATA = 0x00;
+      spiWait();
+    } else {
+      REG_AUXSPIDATA = 0x00;
+      spiWait();
+      iprintf("BYTE 2: 0x%02X\n", REG_AUXSPIDATA);
+    }
   }
-
-  REG_AUXSPICNT = 0x00;
-  spiWait();
-
-  irqDisable(IRQ_CARD_LINE);
+  return false;
 }
 
 static bool hciReset(void) {
   const u8 buffer[4] = {0x01, 0x03, 0x0C, 0x00};
+  u8 out[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   BTCMD cmdData;
 
   cmdData.requestSize = 4;
   cmdData.requestData = buffer;
-  cmdData.responseSize = -1;
-  cmdData.responseData = NULL;
+  cmdData.responseSize = 7;
+  cmdData.responseData = out;
 
-  btTransfer(&cmdData);
-  return cmdData.responseSize == 0;
+  return btTransfer(&cmdData) ? cmdData.responseSize == 7 : false;
 }
 
 // Main
 
 int main(void) {
-  // Init console.
+  // Init screens.
   videoSetMode(MODE_0_2D);
+  videoSetModeSub(MODE_0_2D);
   vramSetBankA(VRAM_A_MAIN_BG);
   consoleInit(NULL, 3, BgType_Text4bpp, BgSize_T_256x256, 31, 0, true, true);
 
+  iprintf("Setting up IRQ handlers...\n");
+  irqEnable(IRQ_CARD_LINE);
+  irqSet(IRQ_CARD_LINE, irqCmd);
+
 mainMenu:
   consoleClear();
-  iprintf("--- PTSM v0.1 ---\n");
-
-  // Read game header.
-  requestCardAccess();
-  tNDSHeader *header = readHeader();
-  if (!header) {
-    iprintf("Game not found!\n");
-    iprintf("Press any key to retry...\n");
-    waitForKey();
-    goto mainMenu;
-  }
 
   // Get game region.
-  TARegion region = getTARegion(header);
+  TARegion region = getGameRegion();
   if (region == TARegion_Unknown) {
-    iprintf("Unknown cartridge!\n");
+    printError("Unknown cartridge/region!");
     iprintf("Press any key to retry...\n");
     waitForKey();
     goto mainMenu;
   }
 
-  iprintf("Game found!\n");
   iprintf("Region: %s\n", regionAsString(region));
 
-  // Reset game.
-  cardReset();
-
   // Get option.
-  iprintf("> START: Dump savegame\n");
-  iprintf("> SELECT: Restore savegame\n");
-  iprintf("> OTHER: Quit\n");
+  iprintf("> A: Dump savegame\n");
+  iprintf("> B: Restore savegame\n");
+  iprintf("> Other: Quit\n");
   // uint32 opt = waitForKeys();
 
+  iprintf("Waiting for chip...\n");
+  swiDelay(4190000 * 5); // ugly, but seems to be enough for the card to load
   iprintf("Attempting HCI reset...\n");
   if (hciReset()) {
-    iprintf("Success!\n");
+    printSuccess("Success!");
   } else {
-    iprintf("Failure!\n");
+    printError("Failure!");
   }
 
-  iprintf("Press any key to quit...\n");
+  iprintf("Press any key to retry...\n");
   waitForKey();
+  goto mainMenu;
   return 0;
 }
