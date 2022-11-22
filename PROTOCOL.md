@@ -1,8 +1,6 @@
 # Protocol
 
-Before doing anything the card must be initialized? A delay seems to do the trick, but this game is weird af.
-
-Communication uses SPI. A transaction is defined by a request and a response. Every transaction starts with `SPICNT = 0xA040` and `SPIDATA = { 0xFF }`; after that, `SPICNT = 0x43` for whatever reason. Every request is sent using `SPIDATA = { 0x01, 0x00 }` with `SPICNT = 0xA040`. First two bytes after that are the packet size in big endian, next bytes are HCI packets. HCI packets are structured as so:
+Communication uses AUXSPI. A transaction is defined by a request and a response. Every transaction starts with `SPICNT = 0xA040` and `SPIDATA = { 0xFF }`; after that, `SPICNT = 0x43` for whatever reason. Every request is sent using `SPIDATA = { 0x01, 0x00 }` with `SPICNT = 0xA040`. First two bytes after that are the packet size in big endian, next bytes are HCI packets. HCI packets are structured as so:
 - First byte is packet type. Possible values:
 ```
 0x01 = command
@@ -18,7 +16,7 @@ Communication uses SPI. A transaction is defined by a request and a response. Ev
 
 You get the response with command `{ 0x02, 0x00 }`. First two bytes is, yet again, the packet size. Next bytes are the response, which format depends on the command.
 
-Once the card has received the request, an IRQ (IREQ_MC) is triggered. This is simply a synchronization mechanism, as the code that sends the commands and the one that receives the output run on separate threads. The IRQ handler sends a message to each thread, depending on what the last operation was (if a command is sent, the reader thread is woken up; if a read happened, the sender thread gets ready). An IRQ is also triggered when sending the header byte `0xFF`, but this is ignored by the game.
+Once the card has received the request, an IRQ (IREQ_MC) is triggered. This is simply a synchronization mechanism, as the code that sends the commands and the one that receives the output run on separate threads. An IRQ is also triggered when sending the header byte `0xFF`, but this is ignored by the game.
 
 Transaction example:
 

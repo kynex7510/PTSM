@@ -9,18 +9,6 @@ typedef struct {
   u8 *responseData;
 } BTCMD, *PBTCMD;
 
-volatile bool g_GotCmd = false;
-
-// IRQ stuff
-
-static void irqCmd(void) { g_GotCmd = true; }
-
-static void waitForIrq(void) {
-  do {
-  } while (!g_GotCmd);
-  g_GotCmd = false;
-}
-
 // SPI stuff
 
 static void spiWait(void) {
@@ -29,16 +17,12 @@ static void spiWait(void) {
 }
 
 static bool btTransfer(PBTCMD cmdData) {
-  REG_ROMCTRL = 0x27416000;
-
   // Initialize connection.
-  g_GotCmd = false;
   REG_AUXSPICNT = 0xA040;
   REG_AUXSPIDATA = 0xFF;
   spiWait();
   REG_AUXSPICNT = 0x43;
   swiDelay(20);
-  waitForIrq();
   iprintf("Got init irq\n");
 
   // Send request command.
@@ -63,8 +47,7 @@ static bool btTransfer(PBTCMD cmdData) {
     spiWait();
   }
 
-  waitForIrq();
-  iprintf("Got command irq\n");
+  iprintf("Got cmd irq\n");
 
   // Send response command.
   REG_AUXSPICNT = 0xA040;
@@ -78,6 +61,8 @@ static bool btTransfer(PBTCMD cmdData) {
   // or something, idk but first two bytes (length)
   // are always 00 00, which is not good.
 
+  iprintf("Hello\n");
+
   // Get response size.
   for (int i = 0u; i < 5; i++) {
     swiDelay(4190000 * 5);
@@ -85,7 +70,7 @@ static bool btTransfer(PBTCMD cmdData) {
     spiWait();
     iprintf("BYTE 1: 0x%02X\n", REG_AUXSPIDATA);
     if (i == 4) {
-      REG_AUXSPICNT = 0x00;
+      REG_AUXSPICNT = 0xA000;
       REG_AUXSPIDATA = 0x00;
       spiWait();
     } else {
@@ -118,10 +103,6 @@ int main(void) {
   videoSetModeSub(MODE_0_2D);
   vramSetBankA(VRAM_A_MAIN_BG);
   consoleInit(NULL, 3, BgType_Text4bpp, BgSize_T_256x256, 31, 0, true, true);
-
-  iprintf("Setting up IRQ handlers...\n");
-  irqEnable(IRQ_CARD_LINE);
-  irqSet(IRQ_CARD_LINE, irqCmd);
 
 mainMenu:
   consoleClear();
