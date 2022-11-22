@@ -10,4 +10,4 @@ RE notes about the bluetooth chip inside Learn With Pokémon: Typing Adventure. 
 - - If no, does the game assume the card is initialized?
 - - Is any of the other IRQs involved?
 
-- Sending the same command twice leads to a trash response second time.
+- Sending the same command twice leads to a trash response second time/IRQ not triggered. We probably need to terminate the connection in some way.

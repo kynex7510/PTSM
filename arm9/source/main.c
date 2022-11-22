@@ -1,86 +1,24 @@
+#include "lwptabt.h"
 #include "utility.h"
 
 #include <stdio.h>
 
-typedef struct {
-  u16 requestSize;
-  const u8 *requestData;
-  u16 responseSize;
-  u8 *responseData;
-} BTCMD, *PBTCMD;
-
-// SPI stuff
-
-static void spiWait(void) {
-  do {
-  } while (REG_AUXSPICNT & 0x80);
-}
-
-static bool btTransfer(PBTCMD cmdData) {
-  // Initialize connection.
-  REG_AUXSPICNT = 0xA040;
-  REG_AUXSPIDATA = 0xFF;
-  spiWait();
-  REG_AUXSPICNT = 0x43;
-  swiDelay(200);
-
-  // Send request command.
-  REG_AUXSPICNT = 0xA040;
-  REG_AUXSPIDATA = 0x01;
-  spiWait();
-  REG_AUXSPIDATA = 0x00;
-  spiWait();
-
-  // Send request size.
-  REG_AUXSPIDATA = (cmdData->requestSize >> 8);
-  spiWait();
-  REG_AUXSPIDATA = cmdData->requestSize;
-  spiWait();
-
-  // Send request data.
-  for (u16 i = 0; i < cmdData->requestSize; i++) {
-    if (i == (cmdData->requestSize - 1))
-      REG_AUXSPICNT = 0xA000;
-
-    REG_AUXSPIDATA = cmdData->requestData[i];
-    spiWait();
-  }
-
-  // Wait for cartridge.
-  swiIntrWait(1, IRQ_CARD_LINE);
-
-  // Send response command.
-  REG_AUXSPICNT = 0xA040;
-  REG_AUXSPIDATA = 0x02;
-  spiWait();
-  REG_AUXSPIDATA = 0x00;
-  spiWait();
-
-  // Get response size.
-  for (int i = 0u; i < 9; i++) {
-    if (i == 8)
-      REG_AUXSPICNT = 0xA000;
-    REG_AUXSPIDATA = 0x00;
-    spiWait();
-    iprintf("BYTE 1: 0x%02X\n", REG_AUXSPIDATA);
-  }
-
-  REG_AUXSPICNT = 0x00;
-  REG_AUXSPIDATA = 0x00;
-  return false;
-}
-
 static bool hciReset(void) {
   const u8 buffer[4] = {0x01, 0x03, 0x0C, 0x00};
-  u8 out[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-  BTCMD cmdData;
+  u8 out[7] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  BTData data;
 
-  cmdData.requestSize = 4;
-  cmdData.requestData = buffer;
-  cmdData.responseSize = 7;
-  cmdData.responseData = out;
+  data.request = buffer;
+  data.requestSize = 4;
+  data.response = out;
+  data.responseSize = 7;
 
-  return btTransfer(&cmdData) ? cmdData.responseSize == 7 : false;
+  btTransfer(&data);
+
+  iprintf("Response size: %u\n", data.responseSize);
+  for (u16 i = 0; i < data.responseSize; i++)
+    iprintf("Data[%u]: 0x%02X\n", i, data.response[i]);
+  return data.responseSize == 7;
 }
 
 // Main
@@ -92,7 +30,8 @@ int main(void) {
   vramSetBankA(VRAM_A_MAIN_BG);
   consoleInit(NULL, 3, BgType_Text4bpp, BgSize_T_256x256, 31, 0, true, true);
 
-  irqEnable(IRQ_CARD_LINE);
+  // Init bluetooth.
+  btInit();
 
 mainMenu:
   consoleClear();

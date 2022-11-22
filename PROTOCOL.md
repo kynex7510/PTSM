@@ -1,56 +1,23 @@
 # Protocol
 
-Communication uses AUXSPI. A transaction is defined by a request and a response. Every transaction starts with `SPICNT = 0xA040` and `SPIDATA = { 0xFF }`; after that, `SPICNT = 0x43` for whatever reason. Every request is sent using `SPIDATA = { 0x01, 0x00 }` with `SPICNT = 0xA040`. First two bytes after that are the packet size in big endian, next bytes are HCI packets. HCI packets are structured as so:
-- First byte is packet type. Possible values:
-```
-0x01 = command
-0x02 = async data
-0x03 = sync data (should be unused)
-0x04 = event
-0x09 = extension/custom command
-```
-- Next two bytes are the "Opcode Group Field" and "Opcode Command Field". Bytes must be transformed from big endian to little endian, then OGF is `x >> 10`, while OCF is `x & 0x3FF`.
+Communication uses the HCI protocol over AUXSPI. 2 Commands are available.
 
-- Next byte is number of parameters (max 0xFF - 255).
-- Next bytes make up the parameters (or none if n = 0).
+- **{ 0x01, 0x00 }**: command used for sending HCI packets. First 2 bytes represent the size of the HCI packet, in big endian; then there is the HCI packet itself.
 
-You get the response with command `{ 0x02, 0x00 }`. First two bytes is, yet again, the packet size. Next bytes are the response, which format depends on the command.
+- **{ 0x02, 0x00 }**: command used for receving data and events. First 2 bytes, once again, represents the size of the incoming data, in big endian; next byte determines the type of the data (raw data, event data).
 
-Once the card has received the request, an IRQ (IREQ_MC) is triggered. This is simply a synchronization mechanism, as the code that sends the commands and the one that receives the output run on separate threads. An IRQ is also triggered when sending the header byte `0xFF`, but this is ignored by the game.
+Before sending any command the chip must be initialized:
 
-Transaction example:
-
-```
-First we write to the SPI bus:
-
-FF      // starts transaction
-
-/* IREQ_MC triggered: card is listening for a command */
-
-01 00 	// prepare chip to receive command
-00 04 	// size of command payload
-01  	// HCI packet type ("command" in this case)
-03 0C 	// HCI OGF and OCF (OGF = controller, OCF = reset)
-00      // num of params
-
-/* IREQ_MC triggered: card successfully received the command */
-
-02 00 	// Ask chip for data
-
-From now on, we read from the bus:
-
-YY XX 	// Response size
-.....	// Response data
-
-/* IREQ_MC triggered: card is ready for another command */
+```c
+AUXSPICNT = 0xA040;
+AUXSPIDATA = 0xFF;
+spiWait();
+AUXSPICNT = 0x43;
+delay(200);
 ```
 
-**List of vendor specific HCI commands (OGF = 0x3F)**
+An IRQ, `IRQ_CARD_LINE/IREQ_MC`, is triggered, this can be safely ignored. Once the application has sent the HCI packet, it must wait for the same IRQ to trigger again, which is the mechanism used by the chip to let the application know when the command has been handled. (**TODO**: how to gracefully terminate?)
 
-Maybe one of these is used for savegames
+As specified by the HCI protocol, the chip supports some vendor specific commands, which are reported below. All of them have OGF = 0x3F. (**TODO**: Maybe one of these is used for savegames?)
 
-### ??? (OCF = 0x6E)
-
-Unknown.
-
-todo...
+- **??? (0x6E)**: unknown
