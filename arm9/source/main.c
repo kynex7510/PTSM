@@ -22,8 +22,7 @@ static bool btTransfer(PBTCMD cmdData) {
   REG_AUXSPIDATA = 0xFF;
   spiWait();
   REG_AUXSPICNT = 0x43;
-  swiDelay(20);
-  iprintf("Got init irq\n");
+  swiDelay(200);
 
   // Send request command.
   REG_AUXSPICNT = 0xA040;
@@ -47,7 +46,8 @@ static bool btTransfer(PBTCMD cmdData) {
     spiWait();
   }
 
-  iprintf("Got cmd irq\n");
+  // Wait for cartridge.
+  swiIntrWait(1, IRQ_CARD_LINE);
 
   // Send response command.
   REG_AUXSPICNT = 0xA040;
@@ -56,29 +56,17 @@ static bool btTransfer(PBTCMD cmdData) {
   REG_AUXSPIDATA = 0x00;
   spiWait();
 
-  // I'm 99% confident anything above is correct.
-  // Here we probably need to synchronize with the cart
-  // or something, idk but first two bytes (length)
-  // are always 00 00, which is not good.
-
-  iprintf("Hello\n");
-
   // Get response size.
-  for (int i = 0u; i < 5; i++) {
-    swiDelay(4190000 * 5);
+  for (int i = 0u; i < 9; i++) {
+    if (i == 8)
+      REG_AUXSPICNT = 0xA000;
     REG_AUXSPIDATA = 0x00;
     spiWait();
     iprintf("BYTE 1: 0x%02X\n", REG_AUXSPIDATA);
-    if (i == 4) {
-      REG_AUXSPICNT = 0xA000;
-      REG_AUXSPIDATA = 0x00;
-      spiWait();
-    } else {
-      REG_AUXSPIDATA = 0x00;
-      spiWait();
-      iprintf("BYTE 2: 0x%02X\n", REG_AUXSPIDATA);
-    }
   }
+
+  REG_AUXSPICNT = 0x00;
+  REG_AUXSPIDATA = 0x00;
   return false;
 }
 
@@ -103,6 +91,8 @@ int main(void) {
   videoSetModeSub(MODE_0_2D);
   vramSetBankA(VRAM_A_MAIN_BG);
   consoleInit(NULL, 3, BgType_Text4bpp, BgSize_T_256x256, 31, 0, true, true);
+
+  irqEnable(IRQ_CARD_LINE);
 
 mainMenu:
   consoleClear();
