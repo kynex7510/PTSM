@@ -8,6 +8,16 @@
 
 #include <nds.h>
 
+typedef enum {
+  BTRegion_Unknown,
+  BTRegion_JPN,
+  BTRegion_ITA,
+  BTRegion_ENG,
+  BTRegion_SPA,
+  BTRegion_GER,
+  BTRegion_FRA,
+} BTRegion;
+
 typedef struct {
   const u8 *request; // Input buffer.
   u16 requestSize;   // Input buffer size.
@@ -15,7 +25,7 @@ typedef struct {
   u16 responseSize;  // Output buffer size.
 } BTData;
 
-void btInit(void);
+BTRegion btInit(void);
 void btCleanup(void);
 void btTransfer(BTData *data);
 

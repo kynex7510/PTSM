@@ -21,6 +21,24 @@ static bool hciReset(void) {
   return data.responseSize == 7;
 }
 
+static bool hciOther(void) {
+  const u8 buffer[4] = {0x01, 0x05, 0x10, 0x00};
+  u8 out[0x0E];
+  BTData data;
+
+  data.request = buffer;
+  data.requestSize = 4;
+  data.response = out;
+  data.responseSize = 0x0E;
+
+  btTransfer(&data);
+
+  iprintf("Response size: %u\n", data.responseSize);
+  for (u16 i = 0; i < data.responseSize; i++)
+    iprintf("Data[%u]: 0x%02X\n", i, data.response[i]);
+  return data.responseSize == 0x0E;
+}
+
 // Main
 
 int main(void) {
@@ -30,40 +48,42 @@ int main(void) {
   vramSetBankA(VRAM_A_MAIN_BG);
   consoleInit(NULL, 3, BgType_Text4bpp, BgSize_T_256x256, 31, 0, true, true);
 
-  // Init bluetooth.
-  btInit();
-
-mainMenu:
-  consoleClear();
-
-  // Get game region.
-  TARegion region = getGameRegion();
-  if (region == TARegion_Unknown) {
+  // Init chip.
+  iprintf("Initializing chip...\n");
+  BTRegion region = btInit();
+  while (region == BTRegion_Unknown) {
     printError("Unknown cartridge/region!");
     iprintf("Press any key to retry...\n");
     waitForKey();
-    goto mainMenu;
+    consoleClear();
+    region = btInit();
   }
 
-  iprintf("Region: %s\n", regionAsString(region));
+  // Main loop.
+  while (true) {
+    consoleClear();
+    iprintf("Region: %s\n", regionAsString(region));
+    iprintf("> A: Dump savegame\n");
+    iprintf("> B: Restore savegame\n");
+    iprintf("> Other: Quit\n");
+    // uint32 opt = waitForKeys();
 
-  // Get option.
-  iprintf("> A: Dump savegame\n");
-  iprintf("> B: Restore savegame\n");
-  iprintf("> Other: Quit\n");
-  // uint32 opt = waitForKeys();
+    iprintf("Attempting HCI reset...\n");
+    if (hciReset()) {
+      printSuccess("Success!");
+      iprintf("Attempting other...\n");
+      if (hciOther()) {
+        printSuccess("Success!\n");
+      } else {
+        printError("Failure!");
+      }
+    } else {
+      printError("Failure!");
+    }
 
-  iprintf("Waiting for chip...\n");
-  swiDelay(4190000 * 5); // ugly, but seems to be enough for the card to load
-  iprintf("Attempting HCI reset...\n");
-  if (hciReset()) {
-    printSuccess("Success!");
-  } else {
-    printError("Failure!");
+    iprintf("Press any key to retry...\n");
+    waitForKey();
   }
 
-  iprintf("Press any key to retry...\n");
-  waitForKey();
-  goto mainMenu;
   return 0;
 }
