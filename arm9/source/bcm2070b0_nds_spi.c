@@ -1,4 +1,4 @@
-#include "lwptabt.h"
+#include "bcm2070b0_nds_spi.h"
 
 #define GAME_CODE_EMPTY "\x00\x00\x00\x00"
 
@@ -43,13 +43,14 @@ static BTRegion getGameRegion(u8 const *header) {
 }
 
 static void handleIRQ(void) { g_HasTriggeredIRQ = true; }
-static void resetChipState(void) { g_HasTriggeredIRQ = false; }
+static void resetIRQState(void) { g_HasTriggeredIRQ = false; }
 
-static void waitForChip(void) {
+static void waitForIRQ(void) {
   do {
   } while (!g_HasTriggeredIRQ);
 }
 
+static u16 spiGet(void) { return REG_AUXSPICNT; }
 static void spiSet(u16 const cnt) { REG_AUXSPICNT = cnt; }
 
 static void spiWait(void) {
@@ -63,17 +64,14 @@ static u8 spiTransfer(u8 const b) {
   return REG_AUXSPIDATA;
 }
 
-// LWPTABT
+// BCM2070B0 NDS SPI
 
-BTRegion btInit(void) {
+BTRegion btRegion(void) {
   u8 gameHeader[0x200];
   u8 headerCopy[0x200];
 
-  // Request card access.
-  enableSlot1();
-  sysSetBusOwners(BUS_OWNER_ARM9, BUS_OWNER_ARM9);
-
-  // Initialize cartridge.
+  // Read card header.
+  sysSetCardOwner(BUS_OWNER_ARM9);
   cardReadHeader(gameHeader);
   cardReadHeader(headerCopy);
 
@@ -83,22 +81,7 @@ BTRegion btInit(void) {
     return BTRegion_Unknown;
 
   // Get region.
-  BTRegion region = getGameRegion(gameHeader);
-  if (region != BTRegion_Unknown) {
-    // Setup IRQ.
-    irqSet(IRQ_CARD_LINE, handleIRQ);
-    irqEnable(IRQ_CARD_LINE);
-
-    // TODO: sync with chip?
-    swiDelay(4190000 * 5); // Ugly, but seems to be enough for the chip to load.
-  }
-
-  return region;
-}
-
-void btCleanup(void) {
-  irqClear(IRQ_CARD_LINE);
-  disableSlot1();
+  return getGameRegion(gameHeader);
 }
 
 void btTransfer(BTData *data) {
@@ -116,8 +99,13 @@ void btTransfer(BTData *data) {
   const u8 reqCmd[4] = {0x01, 0x00, data->requestSize >> 8, data->requestSize};
   const u8 resCmd[2] = {0x02, 0x00};
 
+  // Enable cart bus & IRQ.
+  sysSetCardOwner(BUS_OWNER_ARM9);
+  irqSet(IRQ_CARD_LINE, handleIRQ);
+  irqEnable(IRQ_CARD_LINE);
+
   // Initialize connection.
-  const u16 oldCnt = REG_AUXSPICNT;
+  const u16 oldCnt = spiGet();
   spiSet(0xA040);
   spiTransfer(0xFF);
   spiSet(0x43);
@@ -130,7 +118,7 @@ void btTransfer(BTData *data) {
 
   for (u16 i = 0; i < data->requestSize; i++) {
     if (i == (data->requestSize - 1)) {
-      resetChipState();
+      resetIRQState();
       spiSet(0xA000);
     }
 
@@ -138,7 +126,7 @@ void btTransfer(BTData *data) {
   }
 
   // Wait for command to be processed.
-  waitForChip();
+  waitForIRQ();
 
   // Get response.
   spiSet(0xA040);
@@ -160,5 +148,7 @@ void btTransfer(BTData *data) {
     }
   }
 
-  REG_AUXSPICNT = oldCnt;
+  // Restore old status.
+  spiSet(oldCnt);
+  irqDisable(IRQ_CARD_LINE);
 }

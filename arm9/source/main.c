@@ -1,43 +1,12 @@
-#include "lwptabt.h"
+#include "bcm2070b0_nds_spi.h"
 #include "utility.h"
 
+#include <fat.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-static bool hciReset(void) {
-  const u8 buffer[4] = {0x01, 0x03, 0x0C, 0x00};
-  u8 out[7] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-  BTData data;
-
-  data.request = buffer;
-  data.requestSize = 4;
-  data.response = out;
-  data.responseSize = 7;
-
-  btTransfer(&data);
-
-  iprintf("Response size: %u\n", data.responseSize);
-  for (u16 i = 0; i < data.responseSize; i++)
-    iprintf("Data[%u]: 0x%02X\n", i, data.response[i]);
-  return data.responseSize == 7;
-}
-
-static bool hciOther(void) {
-  const u8 buffer[4] = {0x01, 0x05, 0x10, 0x00};
-  u8 out[0x0E];
-  BTData data;
-
-  data.request = buffer;
-  data.requestSize = 4;
-  data.response = out;
-  data.responseSize = 0x0E;
-
-  btTransfer(&data);
-
-  iprintf("Response size: %u\n", data.responseSize);
-  for (u16 i = 0; i < data.responseSize; i++)
-    iprintf("Data[%u]: 0x%02X\n", i, data.response[i]);
-  return data.responseSize == 0x0E;
-}
+#define FLASH_FILE "sd:/PTSM_Flash_Dump.bin"
+#define SAVE_FILE "sd:/PTSM_Save_Dump.bin"
 
 // Main
 
@@ -48,41 +17,68 @@ int main(void) {
   vramSetBankA(VRAM_A_MAIN_BG);
   consoleInit(NULL, 3, BgType_Text4bpp, BgSize_T_256x256, 31, 0, true, true);
 
-  // Init chip.
-  iprintf("Initializing chip...\n");
-  BTRegion region = btInit();
-  while (region == BTRegion_Unknown) {
-    printError("Unknown cartridge/region!");
-    iprintf("Press any key to retry...\n");
+  // Init libfat.
+  if (!fatInitDefault()) {
+    printError("FAT init failed!");
+    iprintf("Press any key to quit...\n");
     waitForKey();
-    consoleClear();
-    region = btInit();
+    return 0;
   }
 
+  // Enable card access.
+  enableSlot1();
+
   // Main loop.
+  bool quit = false;
   while (true) {
     consoleClear();
+
+    // Get region.
+    BTRegion region = btRegion();
+    while (region == BTRegion_Unknown) {
+      printError("Unknown cartridge/region!");
+      iprintf("Press any key to retry...\n");
+      waitForKey();
+      consoleClear();
+      region = btRegion();
+    }
+
+    //
+    swiDelay(4190000 * 5);
+    //
+
     iprintf("Region: %s\n", regionAsString(region));
     iprintf("> A: Dump savegame\n");
     iprintf("> B: Restore savegame\n");
+    iprintf("> X: Dump flash\n");
+    iprintf("> Y: Test bluetooth chip\n");
     iprintf("> Other: Quit\n");
-    // uint32 opt = waitForKeys();
+    u32 opt = KEY_X; // uint32 opt = waitForKey();
 
-    iprintf("Attempting HCI reset...\n");
-    if (hciReset()) {
-      printSuccess("Success!");
-      iprintf("Attempting other...\n");
-      if (hciOther()) {
-        printSuccess("Success!\n");
-      } else {
-        printError("Failure!");
-      }
+    if (opt & KEY_A) {
+      if (dumpSave(SAVE_FILE))
+        printSuccess("Savegame dumped successfully!");
+    } else if (opt & KEY_B) {
+      printError("Unimplemented!");
+    } else if (opt & KEY_X) {
+      if (dumpFlash(FLASH_FILE))
+        printSuccess("Flash dumped successfully!");
+    } else if (opt & KEY_Y) {
+      if (testBT())
+        printf("Bluetooth test succeeded!");
+      else
+        printf("Bluetooth test failed!");
     } else {
-      printError("Failure!");
+      quit = true;
     }
 
-    iprintf("Press any key to retry...\n");
+    if (quit)
+      break;
+
+    iprintf("Press any key to quit...\n"); // iprintf("Press any key to
+                                           // continue...\n");
     waitForKey();
+    break;
   }
 
   return 0;

@@ -2,6 +2,11 @@
 
 RE notes about the bluetooth chip inside Learn With Pokémon: Typing Adventure. Hopefully soon to become a savedata manager.
 
-## Mysteries
+~~Homebrew for dumping and restoring savegames for Learn With Pokémon: Typing Adventure. Additionally you can dump the content of the flash chip inside the cartridge, or test the bluetooth chip.~~
 
-IRQ is not sent if we dont do `swiDelay(4190000 * 5)` at the start. Moreover, commands send successfully only if sequential, ie. in the case of our loop, only the first time will work. Interestingly, values other than `4190000 * 5`, even greater, wont work and will hang waiting for the IRQ. This suggests that the code somehow has to synchronize with the cartridge. The question then becomes: how?
+~~Requires SD card access; tested on 3DS with [TWiLightMenu](https://github.com/DS-Homebrew/TWiLightMenu) (DSi should work fine).~~
+
+## Thanks
+
+- [Arisotura](https://github.com/Arisotura), for sharing [notes](https://melonds.kuribo64.net/board/thread.php?pid=3606) about the game;
+- [enler](https://github.com/enler), for [PokemonTypingDSHacking](https://github.com/enler/PokemonTypingDSHacking).

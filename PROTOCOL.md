@@ -18,6 +18,10 @@ delay(200);
 
 An IRQ, `IRQ_CARD_LINE/IREQ_MC`, is triggered, this can be safely ignored. Once the application has sent the HCI packet, it must wait for the same IRQ to trigger again, which is the mechanism used by the chip to let the application know when the command has been handled.
 
-As specified by the HCI protocol, the chip supports some vendor specific commands, which are reported below. All of them have OGF = 0x3F. (**TODO**: Maybe one of these is used for savegames?)
+As specified by the HCI protocol, the chip supports some vendor specific commands, which are reported below. All of them have OGF = 0x3F.
 
-- **??? (0x6E)**: unknown
+- **Write Flash (0x4C)**
+- **Read Flash (0x4D)**
+- **Read Controller Features (0x6E)**
+- **Read Verbose Config Info (0x79)**
+- **Sector Erase (0x035E)**

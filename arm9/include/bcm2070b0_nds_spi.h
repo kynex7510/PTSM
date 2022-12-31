@@ -1,10 +1,10 @@
-/*
-    lwtabt.h
-    Interface for the Learn With Pokémon: Typing Adventure bluetooth
-    chip built in the cartridge.
-*/
-#ifndef _LWP_TA_BT_H
-#define _LWP_TA_BT_H
+/**
+ * bcm2070b0_nds_spi.h
+ * Driver for the BCM2070B0, the bluetooth chip inside Learn With Pokémon:
+ * Typing Adventure cartridges.
+ */
+#ifndef _BCM2070B0_NDS_SPI_H
+#define _BCM2070B0_NDS_SPI_H
 
 #include <nds.h>
 
@@ -25,8 +25,10 @@ typedef struct {
   u16 responseSize;  // Output buffer size.
 } BTData;
 
-BTRegion btInit(void);
-void btCleanup(void);
+// Get region of cartridge.
+BTRegion btRegion(void);
+
+// Transfer data.
 void btTransfer(BTData *data);
 
-#endif /* _LWP_TA_BT_H */
+#endif /* _BCM2070B0_NDS_SPI_H */
