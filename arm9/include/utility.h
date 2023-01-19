@@ -9,6 +9,7 @@ u32 waitForKey(void);
 char const *regionAsString(BTRegion const region);
 bool dumpFlash(const char *filename);
 bool dumpSave(const char *filename);
+bool restoreSave(const char *filename);
 bool testBT(void);
 
 #endif /* _UTILITY_H */

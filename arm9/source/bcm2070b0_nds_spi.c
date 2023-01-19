@@ -70,6 +70,9 @@ BTRegion btRegion(void) {
   u8 gameHeader[0x200];
   u8 headerCopy[0x200];
 
+  irqSet(IRQ_CARD_LINE, handleIRQ);
+  irqEnable(IRQ_CARD_LINE);
+
   // Read card header.
   sysSetCardOwner(BUS_OWNER_ARM9);
   cardReadHeader(gameHeader);
@@ -99,20 +102,17 @@ void btTransfer(BTData *data) {
   const u8 reqCmd[4] = {0x01, 0x00, data->requestSize >> 8, data->requestSize};
   const u8 resCmd[2] = {0x02, 0x00};
 
-  // Enable cart bus & IRQ.
-  sysSetCardOwner(BUS_OWNER_ARM9);
-  irqSet(IRQ_CARD_LINE, handleIRQ);
-  irqEnable(IRQ_CARD_LINE);
-
   // Initialize connection.
   const u16 oldCnt = spiGet();
   spiSet(0xA040);
   spiTransfer(0xFF);
   spiSet(0x43);
-  swiDelay(200);
+  resetIRQState();
 
   // Send request.
   spiSet(0xA040);
+  waitForIRQ();
+
   for (int i = 0; i < 4; i++)
     spiTransfer(reqCmd[i]);
 
@@ -150,5 +150,4 @@ void btTransfer(BTData *data) {
 
   // Restore old status.
   spiSet(oldCnt);
-  irqDisable(IRQ_CARD_LINE);
 }

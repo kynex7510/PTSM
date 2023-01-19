@@ -43,9 +43,7 @@ int main(void) {
       region = btRegion();
     }
 
-    //
-    swiDelay(4190000 * 5);
-    //
+    swiDelay(0x82EA * 200); // 200ms
 
     iprintf("Region: %s\n", regionAsString(region));
     iprintf("> A: Dump savegame\n");
@@ -53,21 +51,23 @@ int main(void) {
     iprintf("> X: Dump flash\n");
     iprintf("> Y: Test bluetooth chip\n");
     iprintf("> Other: Quit\n");
-    u32 opt = KEY_X; // uint32 opt = waitForKey();
+
+    u32 opt = waitForKey();
 
     if (opt & KEY_A) {
       if (dumpSave(SAVE_FILE))
         printSuccess("Savegame dumped successfully!");
     } else if (opt & KEY_B) {
-      printError("Unimplemented!");
+      if (restoreSave(SAVE_FILE))
+        printSuccess("Savegame restored successfully!");
     } else if (opt & KEY_X) {
       if (dumpFlash(FLASH_FILE))
         printSuccess("Flash dumped successfully!");
     } else if (opt & KEY_Y) {
       if (testBT())
-        printf("Bluetooth test succeeded!");
+        printSuccess("Bluetooth test succeeded!");
       else
-        printf("Bluetooth test failed!");
+        printError("Bluetooth test failed!");
     } else {
       quit = true;
     }
@@ -75,10 +75,8 @@ int main(void) {
     if (quit)
       break;
 
-    iprintf("Press any key to quit...\n"); // iprintf("Press any key to
-                                           // continue...\n");
+    iprintf("Press any key to continue...\n");
     waitForKey();
-    break;
   }
 
   return 0;

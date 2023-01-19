@@ -2,4 +2,3 @@ build
 *.elf
 *.elf.*
 *.nds
-icon.png
